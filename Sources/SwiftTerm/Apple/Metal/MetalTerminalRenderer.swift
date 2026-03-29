@@ -10,6 +10,7 @@ import MetalKit
 import AppKit
 #else
 import UIKit
+import CoreImage
 #endif
 
 struct GlyphKey: Hashable {
@@ -1822,23 +1823,11 @@ final class MetalTerminalRenderer: NSObject, MTKViewDelegate {
         rgb.getRed(&r, green: &g, blue: &b, alpha: &a)
         return SIMD4<Float>(Float(r), Float(g), Float(b), Float(a))
         #else
-        // Convert to sRGB via CGColor to handle all UIColor color spaces.
-        // UIColor.getRed() returns false for non-RGB color spaces (grayscale,
-        // display P3 without explicit conversion, etc.), causing colors to
-        // silently fall back to black or the default foreground.
-        let cgColor = color.cgColor
-        if let srgb = CGColorSpace(name: CGColorSpace.sRGB),
-           let converted = cgColor.converted(to: srgb, intent: .defaultIntent, options: nil),
-           let c = converted.components, c.count >= 3 {
-            return SIMD4<Float>(Float(c[0]), Float(c[1]), Float(c[2]),
-                                c.count >= 4 ? Float(c[3]) : 1.0)
-        }
-        // Fallback: try getRed directly
-        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 1
-        if color.getRed(&r, green: &g, blue: &b, alpha: &a) {
-            return SIMD4<Float>(Float(r), Float(g), Float(b), Float(a))
-        }
-        return SIMD4<Float>(0, 0, 0, 1)
+        // Use CIColor for reliable RGB extraction on iOS.
+        // UIColor.getRed() and CGColor.converted() both fail for
+        // certain color spaces. CIColor always gives RGB components.
+        let ci = CIColor(color: color)
+        return SIMD4<Float>(Float(ci.red), Float(ci.green), Float(ci.blue), Float(ci.alpha))
         #endif
     }
 
